@@ -4,42 +4,34 @@ import josx.platform.rcx.*;
 
 public class Vault
 {
-	private static final int DOT = 1;
-	private static final int DASH = 2;
-	private static final int RESET = 3;
+	private static final double INCREMENT_PAUSE = 410;
 	
-	private static final double DOT_MIN = 0;
-	private static final double DOT_MAX = 500;
-	
-	private static final double DASH_MIN = DOT_MAX;
-	private static final double DASH_MAX = 2000;
-	
+	private static final double ENTRY_TIMEOUT = 15000;
 	
 	
 	
 	private static int key[];
 	private static int entry[];
-	private static int final keyLength;
+	private static final int keyLength = 4;
 	private static final int MAX_KEY_LENGTH = 10;
 	
 	private static final double LOCK_TIME = 3000;
 	
 	
-	//private static final double ENTRY_TIMEOUT = 4000;
+	
 	
 	
   public static void main (String[] aArg)
   throws Exception
   {
 	  //	init key & entry arrays
-	  keyLength = 4;
 	  key = new int[keyLength];
-	  entry = new int[20];
+	  entry = new int[keyLength];
 	  
-	  key[0] = DOT;
-	  key[1] = DASH;
-	  key[2] = DOT;
-	  key[3] = DASH;
+	  key[0] = 5;
+	  key[1] = 6;
+	  key[2] = 2;
+	  key[3] = 9;
 	  
 	  
 	  
@@ -47,29 +39,71 @@ public class Vault
 	  {
 		  while ( isClosed() )
 		  {
+			  wipeEntry();
+			  
+			  while ( !isPressed() ) {}
+			  while ( isPressed() ) {}
+			  
 			  int entryIndex = 0;
 			  
-			  while ( entryIndex < MAX_KEY_LENGTH )
+			  
+			  double lastEntry = currentTime();
+			  double lastIncrement = currentTime();
+			  
+			  entry[entryIndex] = 0;
+			  
+			  
+			  showEntry(0);
+			  
+			  while ( true )
 			  {
-				  int character = getCharacter2();
-				  
-				  if ( character == RESET )break;
-				  entry[entryIndex] = character;
-				  
-				  if ( checkEntry(entryIndex + 1) )
+				  if ( currentTime() - lastIncrement > INCREMENT_PAUSE )
 				  {
-					  unlock();
-					  break;
+					  int value = (entry[entryIndex] + 1) % 10;
+					  entry[entryIndex] = value;
+					  lastIncrement = currentTime();
+					  
+					  showEntry(entryIndex + 1);
 				  }
 				  
-				  ++entryIndex;
+				  /*if ( currentTime() - lastEntry > ENTRY_TIMEOUT )
+				  {
+					  Sound.buzz();
+					  break;
+				  }*/
+				  
+				  if ( isPressed() )
+				  {
+					  ++entryIndex;
+					  Sound.beep();
+					  while ( isPressed() ) {}
+					  lastIncrement = currentTime();
+					  lastEntry = lastIncrement;
+					  
+					  if ( entryIndex == keyLength )
+					  {
+						  LCD.clear();
+						  TextLCD.print("");
+						  if ( checkEntry() )
+						  {
+							  unlock();
+							  break;
+						  }
+						  else
+						  {
+							  LCD.clear();
+							  TextLCD.print("Oops...");
+							  Sound.buzz();
+							  break;
+						  }
+					  }
+				  }
+				  
+				  
+				  
 			  }
-			  
-			  if ( entryIndex == (MAX_KEY_LENGTH - 1) && isClosed() )
-			  {
-				  //	failed entry
-				  Sound.buzz();
-			  }
+				  
+				  
 		  }
 		  
 		  lock();
@@ -84,22 +118,58 @@ public class Vault
   }
 	
 	
-	public static boolean checkEntry(int entryCount)
+	public static boolean checkEntry()
 	{
-		if ( entryCount == keyLength )
+		for ( int i = 0; i < keyLength; i++ )
 		{
-			for ( int i = 0; i < keyLength; i++ )
+			if ( entry[i] != key[i] )
 			{
-				if ( entry[i] != key[i] )
-				{
-					return false;
-				}
+				return false;
 			}
-			
-			return true;
 		}
 		
-		return false;
+		return true;
+	}
+	
+	
+	public static char charFromDigit(int digit)
+	{
+		char[] digitChars = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+		int index = digit % 10;
+		return digitChars[index];
+	}
+	
+	
+	public static void wipeEntry()
+	{
+		for ( int i = 0; i < keyLength; i++ )
+		{
+			entry[i] = -1;
+		}
+	}
+	
+	
+	public static void showEntry(int charCount)
+	{
+		char[] disp = new char[keyLength];
+		for ( int i = 0; i < keyLength; i++ )
+		{
+			if ( i < charCount - 1 )
+			{
+				disp[i] = '-';
+			}
+			else
+			{
+				int digit = entry[i];
+				if ( digit == -1 ) disp[i] = '_';
+				else disp[i] = charFromDigit(digit);
+			}
+		}
+		
+		String dispStr = new String(disp, 0, keyLength);
+		
+		LCD.clear();
+		TextLCD.print(dispStr);
 	}
 	
 	
@@ -110,56 +180,13 @@ public class Vault
 	}
 	
 	
-	public static int getCharacter()
-	{
-		while ( !isPressed() ) {}	//	wait for them to release it if necessary
-		double startTime = currentTime();
-		while ( isPressed() ) {}	//	wait for press
-		double pressDuration = currentTime() - startTime;
-		
-		if ( pressDuration > DOT_MIN && pressDuration < DOT_MAX ) return DOT;
-		if ( pressDuration > DASH_MIN && pressDuration < DASH_MAX ) return DASH;
-		return RESET;
-	}
-	
-	
-	public static int getCharacter2()
-	{
-		boolean dotAlert = false, dashAlert = false, resetAlert = false;
-		
-		while ( !isPressed() ) {}
-		double startTime = currentTime();
-		while ( isPressed() )
-		{
-			double pressDuration = currentTime() - startTime;
-			if ( pressDuration > DOT_MIN && pressDuration < DOT_MAX && !dotAlert )
-			{
-				Sound.beep();
-				dotAlert = true;
-			}
-			else if ( pressDuration > DASH_MIN && pressDuration < DASH_MAX && !dashAlert )
-			{
-				Sound.twoBeeps();
-				dashAlert = true;
-			}
-			else if ( !resetAlert && pressDuration > DASH_MAX )
-			{
-				Sound.buzz();
-				resetAlert = true;
-			}
-		}
-		
-		double pressDuration = currentTime() - startTime;
-		if ( pressDuration > DOT_MIN && pressDuration < DOT_MAX ) return DOT;
-		if ( pressDuration > DASH_MIN && pressDuration < DASH_MAX ) return DASH;
-		return RESET;
-	}
-	
-	
 	
 	public static void lock()
 	throws Exception
 	{
+		LCD.clear();
+		TextLCD.print("Locking");
+		
 		while ( true )
 		{
 			while ( !isClosed() ) {}
@@ -172,6 +199,8 @@ public class Vault
 				if ( now - startTime > LOCK_TIME )
 				{
 					Motor.A.stop();
+					LCD.clear();
+					TextLCD.print("Locked");
 					Sound.beepSequence();
 					return;
 				}
@@ -183,11 +212,16 @@ public class Vault
 	public static void unlock()
 	throws Exception
 	{
+		LCD.clear();
+		TextLCD.print("Opening");
+		
 		Motor.A.backward();
 		while ( isClosed() ) {}
 		
-		Thread.sleep(1800);
+		Thread.sleep(1700);
 		Motor.A.stop();
+		LCD.clear();
+		TextLCD.print("Open");
 	}
 	
 	
