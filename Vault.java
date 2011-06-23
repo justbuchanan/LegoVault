@@ -19,7 +19,7 @@ public class Vault
 	
 	private static int key[];
 	private static int entry[];
-	private static int keyLength;
+	private static int final keyLength;
 	private static final int MAX_KEY_LENGTH = 10;
 	
 	private static final double LOCK_TIME = 3000;
